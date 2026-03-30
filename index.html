@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>다중우주 볼츠만 뇌 시뮬레이터</title>
+    <style>
+      body {
+        background-color: #000;
+        color: #fff;
+        font-family: "Arial", sans-serif;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+        transition: background-color 2s ease;
+      }
+
+      #container {
+        text-align: center;
+        width: 95%; /* 좌우 여백 확보 */
+        max-width: 600px; /* ★ 기존 800px에서 600px로 줄여 태블릿에서 작게 보이게 함 */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      /* 캔버스 (물리 입자 시뮬레이션) */
+      #simCanvas {
+        background-color: #050a15;
+        border: 2px solid #222;
+        border-radius: 15px;
+        box-shadow: 0 0 30px rgba(0, 255, 204, 0.2);
+        image-rendering: auto;
+
+        /* ★ 반응형 크기 조절 핵심 ★ */
+        width: 100%; /* 컨테이너 너비에 맞춤 */
+        height: auto; /* 비율 유지 */
+        max-height: 45vh; /* ★ 태블릿 세로 화면에서 너무 길어지지 않게 화면 높이의 45%로 제한 */
+        aspect-ratio: 4 / 3; /* 800:600 비율 유지 */
+      }
+
+      /* 컨트롤 패널 */
+      #controlPanel {
+        margin-top: 15px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+      }
+
+      h1 {
+        font-size: clamp(
+          1.2rem,
+          4vw,
+          1.6rem
+        ); /* 글자 크기도 화면에 맞춰 조절 */
+        margin-top: 0;
+        margin-bottom: 10px;
+        color: #888;
+      }
+
+      #status-display {
+        font-size: clamp(0.9rem, 3vw, 1.2rem);
+        color: #00ffcc;
+        margin-bottom: 5px;
+        transition: color 0.5s;
+      }
+
+      button {
+        padding: 12px 35px; /* 버튼 크기도 살짝 축소 */
+        font-size: 1.1rem;
+        font-weight: bold;
+        color: #fff;
+        background: linear-gradient(45deg, #00ffcc, #ff004c);
+        border: none;
+        border-radius: 50px;
+        cursor: pointer;
+        box-shadow: 0 8px 15px rgba(0, 255, 204, 0.2);
+        transition: all 0.2s;
+        user-select: none;
+        touch-action: manipulation; /* 모바일 터치 반응 속도 최적화 */
+      }
+
+      button:active {
+        transform: scale(0.95);
+      }
+
+      button:disabled {
+        background: #222;
+        color: #555;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+
+      /* 설명 텍스트 영역 */
+      #explanation {
+        margin-top: 10px;
+        max-width: 100%;
+        font-size: clamp(
+          0.8rem,
+          2.5vw,
+          0.95rem
+        ); /* 태블릿에서 글자가 너무 크지 않게 */
+        color: #ccc;
+        line-height: 1.5;
+        word-break: keep-all;
+        opacity: 0;
+        transition: opacity 2s ease-in-out;
+      }
+
+      #explanation strong {
+        color: #00ffcc;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <h1>볼츠만 뇌 이론 시뮬레이터</h1>
+      <canvas id="simCanvas" width="800" height="600"></canvas>
+
+      <div id="controlPanel">
+        <div id="status-display">상태: 시공간 요동 중 (엔트로피 최대)</div>
+        <button id="accelBtn">우주 시간 가속 (연타!)</button>
+        <div id="explanation"></div>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("simCanvas");
+      const ctx = canvas.getContext("2d");
+      const statusDisplay = document.getElementById("status-display");
+      const accelBtn = document.getElementById("accelBtn");
+      const explanationDiv = document.getElementById("explanation");
+
+      let particles = [];
+      let isRunning = true;
+      let speedMultiplier = 1;
+      let clickCount = 0;
+
+      // 요구사항 반영: 50번에서 30번으로 횟수 단축
+      const TARGET_CLICKS = 30;
+      let state = "chaotic"; // chaotic, forming, conscious, scattering, dead
+
+      const PARTICLE_COUNT = 2500;
+
+      // 1. 초기 입자 생성
+      function initParticles() {
+        particles = [];
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            vx: (Math.random() - 0.5) * 3,
+            vy: (Math.random() - 0.5) * 3,
+            targetX: 0,
+            targetY: 0,
+            size: Math.random() * 2 + 1,
+            alpha: Math.random() * 0.5 + 0.3,
+            color: "rgba(0, 255, 204, ",
+          });
+        }
+      }
+
+      // 2. 20% 당첨자를 위한 무작위 형태 생성 (뇌, 눈, 기하학 링)
+      function setShapeTargets() {
+        const shapeType = Math.floor(Math.random() * 3); // 3가지 형태 중 무작위
+
+        particles.forEach((p, i) => {
+          const ratio = i / PARTICLE_COUNT;
+
+          if (shapeType === 0) {
+            // 형태 A: 관찰자의 눈 (Eye)
+            if (ratio < 0.6) {
+              // 눈동자 테두리
+              const angle = ratio * Math.PI * 2 * 2;
+              p.targetX = canvas.width / 2 + Math.cos(angle) * 250;
+              p.targetY = canvas.height / 2 + Math.sin(angle) * 100;
+            } else {
+              // 홍채/동공
+              const angle = ratio * Math.PI * 2 * 15;
+              const r = Math.random() * 60;
+              p.targetX = canvas.width / 2 + Math.cos(angle) * r;
+              p.targetY = canvas.height / 2 + Math.sin(angle) * r;
+            }
+          } else if (shapeType === 1) {
+            // 형태 B: 볼츠만 신경망(뇌)
+            const phi = ratio * Math.PI * 2 * 137.5; // 황금비 나선
+            const r = Math.sqrt(ratio) * canvas.width * 0.35;
+            p.targetX =
+              canvas.width / 2 + Math.cos(phi) * r * Math.sin(phi * 0.05 + 0.3);
+            p.targetY =
+              canvas.height / 2 +
+              Math.sin(phi) * r * (1.2 + Math.cos(phi * 0.03 + 0.1));
+          } else {
+            // 형태 C: 완벽한 질서의 링 (Order)
+            const angle = ratio * Math.PI * 2;
+            const radius = 200 + (Math.random() * 20 - 10);
+            p.targetX = canvas.width / 2 + Math.cos(angle) * radius;
+            p.targetY = canvas.height / 2 + Math.sin(angle) * radius;
+          }
+        });
+      }
+
+      // 3. 물리 및 렌더링 업데이트
+      function updateAndDraw() {
+        if (!isRunning) return;
+
+        // 잔상 효과를 위해 투명한 검은색으로 덮음
+        ctx.fillStyle = "rgba(5, 10, 21, 0.3)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        particles.forEach((p) => {
+          if (state === "chaotic") {
+            p.x += p.vx * speedMultiplier;
+            p.y += p.vy * speedMultiplier;
+            if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+            if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+            ctx.fillStyle = p.color + p.alpha + ")";
+          } else if (state === "forming") {
+            // 20% 당첨 우주: 형태로 강하게 빨려들어감
+            p.x += (p.targetX - p.x) * 0.08;
+            p.y += (p.targetY - p.y) * 0.08;
+            ctx.fillStyle = "rgba(255, 255, 255, " + p.alpha + ")";
+          } else if (state === "scattering") {
+            // 80% 탈락 우주: 폭주하며 화면 밖으로 튕겨나감
+            p.x += p.vx * 15; // 엄청난 속도로 폭발
+            p.y += p.vy * 15;
+            ctx.fillStyle = "rgba(255, 50, 50, " + p.alpha + ")"; // 붉은색 붕괴
+          } else if (state === "conscious") {
+            ctx.fillStyle = "rgba(0, 255, 204, 1)";
+          }
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        requestAnimationFrame(updateAndDraw);
+      }
+
+      // 4. 화면 중앙에 최종 텍스트 띄우기 (줄바꿈 지원 버전)
+      function drawFinalText(title, subtitle, color) {
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        ctx.font = "bold 45px 'Malgun Gothic', sans-serif";
+        // 타이틀 위치를 조금 더 위로 올렸습니다 (-40)
+        ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 40);
+
+        ctx.shadowBlur = 0;
+        ctx.font = "20px 'Malgun Gothic', sans-serif";
+
+        // ★ 문장을 \n 기준으로 쪼개서 한 줄씩 그리는 로직
+        const lines = subtitle.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          // i가 0일 때, 1일 때 각각 높이를 30px씩 아래로 조절해서 그립니다.
+          ctx.fillText(
+            lines[i],
+            canvas.width / 2,
+            canvas.height / 2 + 20 + i * 30,
+          );
+        }
+      }
+
+      // 5. 버튼 클릭 및 운명 결정 로직
+      accelBtn.addEventListener("click", () => {
+        if (state !== "chaotic") return;
+
+        speedMultiplier = Math.min(speedMultiplier + 0.2, 5); // 가속도 한계 설정
+        clickCount++;
+
+        // 요구사항 반영: 몇 번 눌렀는지 숫자를 숨기고 긴장감 유발
+        accelBtn.innerText = "시공간 맹렬히 가속 중...!";
+
+        // 30번 클릭 시 우주의 운명이 결정됨
+        if (clickCount >= TARGET_CLICKS) {
+          accelBtn.disabled = true;
+
+          const isMiracle = Math.random() < 0.2;
+
+          if (isMiracle) {
+            // [20% 확률] 질서 형성 (물체 나타남)
+            state = "forming";
+            setShapeTargets();
+            statusDisplay.innerText = "극악의 확률로 질서 형성 관측!";
+            statusDisplay.style.color = "#ffffff";
+            accelBtn.innerText = "통계적 기적 도달";
+
+            // 설명 텍스트 추가 및 Fade-in 연출
+            explanationDiv.innerHTML =
+              "무질서하게 흩날리던 수만 개의 입자들이 우주적 찰나의 순간, 기적적으로 뭉치며 완벽한 고도의 구조물을 형성했습니다.<br><br>열역학 제2법칙을 거스르는 이 <strong>'엔트로피 역전(Entropy Reversal)'</strong> 현상은 무한한 시간이 주어질 때 통계적으로 반드시 발생합니다. 우리의 의식 역시 이 폭주하는 무작위성 속에서 우연히 조립된 수학적 부산물일지 모릅니다.";
+            explanationDiv.style.opacity = 1;
+
+            setTimeout(() => {
+              isRunning = false; // ★ 애니메이션 정지 (텍스트 깜빡임 방지)
+              document.body.style.backgroundColor = "#02040a";
+              canvas.style.boxShadow = "0 0 50px rgba(0, 255, 204, 0.8)";
+              drawFinalText(
+                "원자 질서 관측됨",
+                "> 볼츠만 뇌, 이론상 극악의 확률",
+                "#00ffcc",
+              );
+              statusDisplay.innerText = "생존 우주: 질서가 만들어졌습니다.";
+            }, 2500);
+          } else {
+            // [80% 확률] 붕괴 및 산산조각
+            state = "scattering";
+            statusDisplay.innerText = "임계점 돌파: 우주적 열적 죽음";
+            statusDisplay.style.color = "#ff004c";
+            accelBtn.innerText = "엔트로피 붕괴";
+
+            // 입자들에게 폭발적인 속도 부여
+            particles.forEach((p) => {
+              p.vx = (Math.random() - 0.5) * 50;
+              p.vy = (Math.random() - 0.5) * 50;
+            });
+
+            setTimeout(() => {
+              isRunning = false; // ★ 애니메이션 정지 (텍스트 깜빡임 방지)
+              document.body.style.backgroundColor = "#110000";
+              canvas.style.boxShadow = "none";
+              canvas.style.borderColor = "#330000";
+              drawFinalText(
+                "관측되지 않음",
+                "> 평범한 일상에서 볼츠만 뇌와 같은 현상이 관측된 적은 사실 없습니다.\n 이론상의 확률일 뿐이죠.",
+                "#ff004c",
+              );
+              statusDisplay.innerText =
+                "소멸 우주: 질서가 관측되지 못했습니다.";
+            }, 1500);
+          }
+        }
+      });
+
+      // 시작
+      initParticles();
+      updateAndDraw();
+    </script>
+  </body>
+</html>
